@@ -1,0 +1,4 @@
+# Gitignore file
+venv/
+.idea/
+
