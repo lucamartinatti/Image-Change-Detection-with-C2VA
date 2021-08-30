@@ -1,6 +1,12 @@
 '''
 Multispectral images Change Detection analysis using Compressed Change Vector Analysis (C2VA)
 
+Version 0.1
+
+Author: Luca Martinatti
+
+Original release: 12/11/2020
+
 Dataset: Onera Dataset (https://ieee-dataport.org/open-access/oscd-onera-satellite-change-detection)
 '''
 import os
@@ -219,8 +225,7 @@ def splitSelection(split, original_dimensions, window_size,selection_value='magn
         pha[ind[0] * window_size[0]: ind[0] * window_size[0] + split[0][ind].shape[0], \
             ind[1] * window_size[1]: ind[1] * window_size[1] + split[0][ind].shape[1]] = split[1][ind]
         standDev[ind] = 0.0
-    ls = [mag, pha]
-    return ls
+    return mag, pha
 
 # Change Detection image producer
 def CDmap(image, threshold=None):
@@ -353,7 +358,7 @@ def removeBands(before, after, bandsList):
         return before, after
 
 
-def graphs(mag, dir, g_true):
+def graphs(mag, dir, g_true, split_mag, split_dir):
     # Plot the Magnitude histogram graph
     his = plt.figure(figsize=(8, 8))
     n, bins, patches = plt.hist(mag.ravel(), bins='auto', color='#0504aa', alpha=0.7, rwidth=0.85)
@@ -362,15 +367,19 @@ def graphs(mag, dir, g_true):
     plt.ylabel(r'h(X$\rho)$')
     plt.title('Magnitude', fontsize=20)
     plt.text(23, 45, r'$\mu=15, b=3$')
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
     plt.show()
 
     # Plot the magnitude and phase images
     fig, ax = plt.subplots(1, 2)
     fig.suptitle('Magnitude and Phase images', fontsize=20)
     ax[0].imshow(mag)
-    ax[0].set_title(r'Magnitude value $\rho$')
+    ax[0].set_title(r'Magnitude ($\rho) map$')
     ax[1].imshow(dir)
-    ax[1].set_title(r'Phase value $\theta$')
+    ax[1].set_title(r'Phase ($\theta) map$')
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
     plt.show()
 
     # Plot the comparison between the true and the producted Change Detection maps
@@ -384,8 +393,27 @@ def graphs(mag, dir, g_true):
     confM = confusionMatrix(cdM[1], g_true)
     ax[1].set_title(titles[1] + ' acc= %.2f' % confM[0] + '%' + ' f1= %.2f' % confM[1])
     ax[2].imshow(cdM[2], cmap='gray', interpolation='nearest')
-    confMat = confusionMatrix(cdM[2], g_true)
-    ax[2].set_title(titles[2] + ' acc= %.2f' % confMat[0] + '%' + ' f1= %.2f' % confMat[1])
+    confM = confusionMatrix(cdM[2], g_true)
+    ax[2].set_title(titles[2] + ' acc= %.2f' % confM[0] + '%' + ' f1= %.2f' % confM[1])
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    plt.show()
+
+    # Plot the comparison between the true and the producted Change Detection maps (also the splitted ones)
+    fig, ax = plt.subplots(1, 3)
+    fig.suptitle('Change Detection maps', fontsize=20)
+    cdM = [g_true, CDmap(mag), CDmap(split_mag)]
+    titles = ['Ground truth', 'Magnitude', 'Splitted Magnitude']
+    ax[0].imshow(cdM[0], cmap='gray', interpolation='nearest')
+    ax[0].set_title(titles[0])
+    ax[1].imshow(cdM[1], cmap='gray', interpolation='nearest')
+    confM = confusionMatrix(cdM[1], g_true)
+    ax[1].set_title(titles[1] + ' acc= %.2f' % confM[0] + '%' + ' f1= %.2f' % confM[1])
+    ax[2].imshow(cdM[2], cmap='gray', interpolation='nearest')
+    confM = confusionMatrix(cdM[2], g_true)
+    ax[2].set_title(titles[2] + ' acc= %.2f' % confM[0] + '%' + ' f1= %.2f' % confM[1])
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
     plt.show()
 
 
@@ -421,8 +449,8 @@ if __name__ == "__main__":
         splittedImage = imageSplitting(dMag, dDir, window_size)
 
         # Image produced adaptive split selection
-        ass_image = splitSelection(splittedImage, original_dimensions=dMag.shape[:], window_size=window_size, \
+        s_mag, s_dir = splitSelection(splittedImage, original_dimensions=dMag.shape[:], window_size=window_size, \
                                    num_of_split=splittedImage[0].shape[0]*splittedImage[0].shape[1] * 0.1)
 
         ### PLOT GRAPHS ###
-        graphs(mag= dMag, dir= dDir, g_true=groundTr[im])
+        graphs(mag= dMag, dir= dDir, g_true=groundTr[im], split_mag= s_mag, split_dir= s_dir)
