@@ -16,8 +16,74 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 from typing import Tuple
+from enum import Enum
 
 TRAIN_FILE = "train.txt"
+
+
+class SplitSelectionType(Enum):
+    MAGNITUDE = "magnitude"
+    DIRECTION = "direction"
+
+
+class PerformanceMetrics:
+    """Performance metrics class
+
+    Parameters:
+        x = 1-D or 2-D array like
+            Binary ([0,1] or [0,255]) array or matrix where 0 indicate absence of changing
+            and 1 (or 255) indicate the presence of changing.
+
+        y = 1-D or 2-D array like
+            Binary ([0,1] or [0,255]) array or matrix where 0 indicate absence of changing
+            and 1 (or 255) indicate the presence of changing.
+
+    """
+
+    x: np.array
+    y: np.array
+
+    def __init__(self, x: np.array, y: np.array):
+        self.x = x
+        self.y = y
+        self._calcualte_metrics()
+
+    def _calcualte_metrics(self):
+        if self.x.shape == self.y.shape:
+            error = self.x - self.y
+            # False Positive
+            FP = np.count_nonzero(error > 0)
+            # False Negative
+            FN = np.count_nonzero(error < 0)
+            true = np.count_nonzero(error == 0)  # TP + TN
+            pos = np.count_nonzero(self.x)  # TP + FP
+            neg = np.count_nonzero(self.x == 0)  # TN + FN
+            # True Negative
+            TN = neg - FN
+            # True Positive
+            TP = pos - FP
+
+            # False Alarm probability
+            self.prob_false_allarm = (FP / pos) * 100
+            # Missed Alarm probability
+            self.prob_missed_allarm = (FN / neg) * 100
+
+            # Recall
+            self.reccall = TP / (TP + FN)
+            # Precision
+            self.precision = TP / (TP + FP)
+            # F1-score
+            self.f1 = (2 * self.reccall * self.precision) / (
+                self.reccall + self.precision
+            )
+            error = abs(self.x - self.y)
+            summa = np.count_nonzero(error)
+            if self.x.size == 0:
+                raise ValueError("Prediction size equal to 0, invalid operation!")
+            self.accuracy = ((self.x.size - summa) / self.x.size) * 100
+
+        else:
+            raise ValueError("Error sizes, accuracy function has different size input")
 
 
 # Onera Dataset Multispectral images loader
@@ -89,7 +155,7 @@ def load_ground_truth(base_path: str, places_list: bool = False) -> Tuple[list, 
 
 
 # Compressed Change Vector Analysis function
-def c2va(i_before, i_after) -> Tuple[np.array, np.array]:
+def c2va(i_before: np.array, i_after: np.array) -> Tuple[np.array, np.array]:
     # Magnitude
     sum_x = 0
     dif = np.zeros((i_before.shape[0], i_before.shape[1], i_before.shape[2]))
@@ -120,24 +186,10 @@ def c2va(i_before, i_after) -> Tuple[np.array, np.array]:
     return d_mag, d_dir
 
 
-# Convert uint16 to uint8
-def uint16_to_uint8(img16):
-    tmp = []
-    for i in range(len(img16)):
-        tmp.append(
-            np.uint8(
-                cv2.normalize(
-                    img16[i], None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX
-                )
-            )
-        )
-    return tmp
-
-
 # Split magnitude and phase images in smaller ones
-def imageSplitting(mag, dir, w_size):
+def image_splitting(mag: np.array, dir: np.array, w_size: list) -> list:
     """
-    imageSplitting(mag, dir, image=None)
+    image_splitting(mag, dir, image=None)
 
         PARAMETERS:
                 mag = 2-D array like magnitude image (image raw, image column)
@@ -158,7 +210,7 @@ def imageSplitting(mag, dir, w_size):
     a, b = mag.shape[:]
     ls = []
 
-    splitList = [mag, dir]
+    split_list = [mag, dir]
 
     r_size_dimensioning = True
     c_size_dimensioning = True
@@ -185,7 +237,7 @@ def imageSplitting(mag, dir, w_size):
         else:
             w_size[1] -= 1
 
-    for sl in splitList:
+    for sl in split_list:
         window = []
         for r in range(0, a - w_size[0], w_size[0]):
             tmp = []
@@ -218,20 +270,24 @@ def imageSplitting(mag, dir, w_size):
 
 
 # Select the
-def splitSelection(
-    split, original_dimensions, window_size, selection_value="magnitude", num_of_split=6
-):
+def split_selection(
+    split: list,
+    original_dimensions: list,
+    window_size: list,
+    selection_value: SplitSelectionType = SplitSelectionType.MAGNITUDE,
+    num_of_split: int = 6,
+) -> Tuple[np.array, np.array]:
     """
-    splitSelection(split, selection_value=0, num_of_split = 6)
+    split_selection(split, selection_value=0, num_of_split = 6)
 
         PARAMETERS:
-                split = list of splitted images produced by "imageSplitting" function
+                split = list of splitted images produced by "image_splitting" function
 
                 original_dimensions = int list, original image dimensions
 
                 window_size = tuple of int, split window dimensions
 
-                selection_value = string, optional
+                selection_value = SplitSelectionType, optional
                                   Decide which element of split use to make the selection.
                                   Default value is 'magnitude' indicate that use magnitude for the selection
                                   Other possible value is 'direction' that indicate that use direction for the selection
@@ -242,9 +298,9 @@ def splitSelection(
         RETURNS:
                 structure:  [out_Mag, out_Dir]
 
-                ls = list of 'num_of_split' selected split.
+                ls = tuple of 'num_of_split' selected split.
     """
-    if selection_value == "direction":
+    if selection_value.value == SplitSelectionType.DIRECTION.value:
         sp = split[1]
     else:
         sp = split[0]
@@ -270,7 +326,7 @@ def splitSelection(
 
 
 # Change Detection image producer
-def CDmap(image, threshold=None):
+def CDmap(image: np.array, threshold: float = None) -> np.array:
     # Normalize image between 0 and max
     im = image - image.min()
     if threshold != None:
@@ -292,117 +348,30 @@ def CDmap(image, threshold=None):
         return np.array(it, dtype=int)
 
 
-# Accuracy function
-def accuracy(prediction, real):
-    """
-    accuracy(prediction, real)
-
-        PARAMETERS:
-                prediction = 1-D or 2-D array like
-                             Binary ([0,1] or [0,255]) array or matrix where 0 indicate absence of changing
-                             and 1 (or 255) indicate the presence of changing.
-
-                real = 1-D or 2-D array like
-                       Binary ([0,1] or [0,255]) array or matrix where 0 indicate absence of changing
-                       and 1 (or 255) indicate the presence of changing.
-
-        RETURNS:
-                acc = accuracy of prediction w.r.t. the real case.  Evaluated as (TP + TN)/ (TN + FN + FP + TP)
-    """
-    if prediction.shape == real.shape:
-        error = abs(prediction - real)
-        summa = np.count_nonzero(error)
-        acc = ((prediction.size - summa) / prediction.size) * 100
-        return acc
-    else:
-        raise ValueError("Error sizes, accuracy function has different size input")
-
-
-# Create the confusion matrix
-def confusionMatrix(prediction, real):
-    """
-    confusionMatrix(prediction, real)
-
-        PARAMETERS:
-                prediction = 1-D or 2-D array like
-                             Binary ([0,1] or [0,255]) array or matrix where 0 indicate absence of changing
-                             and 1 (or 255) indicate the presence of changing.
-
-                real = 1-D or 2-D array like
-                       Binary ([0,1] or [0,255]) array or matrix where 0 indicate absence of changing
-                       and 1 (or 255) indicate the presence of changing.
-
-        RETURNS:
-                structure:  [acc, P_err, P_fa, P_ma]
-
-                acc = accuracy of prediction w.r.t. the real case.  Evaluated as (TP + TN)/ (TN + FN + FP + TP).
-                      It is express in percentage (%).
-
-                f1 = F1 score.
-
-                P_fa = probability of false allarm. Evaluated as FP / (TP + FP). It is express in percentage (%).
-
-                P_ma = probability of miss allarm. Evaluated as FN / (TN + FN). It is express in percentage (%).
-
-    """
-    if prediction.shape == real.shape:
-        error = prediction - real
-        # False Positive
-        FP = np.count_nonzero(error > 0)
-        # False Negative
-        FN = np.count_nonzero(error < 0)
-        true = np.count_nonzero(error == 0)  # TP + TN
-        pos = np.count_nonzero(prediction)  # TP + FP
-        neg = np.count_nonzero(prediction == 0)  # TN + FN
-        # True Negative
-        TN = neg - FN
-        # True Positive
-        TP = pos - FP
-
-        # False Alarm probability
-        P_fa = (FP / pos) * 100
-        # Missed Alarm probability
-        P_ma = (FN / neg) * 100
-
-        # Recall
-        rec = TP / (TP + FN)
-        # Precision
-        pre = TP / (TP + FP)
-        # F1-score
-        f1 = (2 * rec * pre) / (rec + pre)
-        # Accuracy (%)
-        acc = accuracy(prediction, real)
-
-        ls = [acc, f1, P_fa, P_ma]
-        return ls
-    else:
-        raise ValueError("Error sizes, accuracy function has different size input")
-
-
 # Remove specific bands from the dataset
-def removeBands(before, after, bandsList):
-    bL = (np.array(bandsList)) - 1
-    if bandsList != []:
+def remove_bands(before: np.array, after: np.array, bands_list: list):
+    bl = (np.array(bands_list)) - 1
+    if bands_list != []:
         i_before = []
         i_after = []
         for im in range(len(before)):
             tmpA = np.zeros(
                 (
-                    before[im].shape[0] - len(bandsList),
+                    before[im].shape[0] - len(bands_list),
                     before[im].shape[1],
                     before[im].shape[2],
                 )
             )
             tmpB = np.zeros(
                 (
-                    before[im].shape[0] - len(bandsList),
+                    before[im].shape[0] - len(bands_list),
                     before[im].shape[1],
                     before[im].shape[2],
                 )
             )
             z = 0
             for b in range(before[im].shape[0]):
-                if b in bL:
+                if b in bl:
                     pass
                 else:
                     tmpA[z] = after[im][b]
@@ -415,7 +384,31 @@ def removeBands(before, after, bandsList):
         return before, after
 
 
-def graphs(mag, dir, g_true, split_mag, split_dir):
+def comparison_plot(mag: np.array, dir: np.array, g_true: np.array, titles: list):
+    fig, ax = plt.subplots(1, 3)
+    fig.suptitle("Change Detection maps", fontsize=20)
+    cdM = [g_true, CDmap(mag), CDmap(dir)]
+    ax[0].imshow(cdM[0], cmap="gray", interpolation="nearest")
+    ax[0].set_title(titles[0])
+    ax[1].imshow(cdM[1], cmap="gray", interpolation="nearest")
+    conf_mat = PerformanceMetrics(cdM[1], g_true)
+    ax[1].set_title(
+        titles[1] + " acc= %.2f" % conf_mat.accuracy + "%" + " f1= %.2f" % conf_mat.f1
+    )
+    ax[2].imshow(cdM[2], cmap="gray", interpolation="nearest")
+    conf_mat_2 = PerformanceMetrics(cdM[2], g_true)
+    ax[1].set_title(
+        titles[1]
+        + " acc= %.2f" % conf_mat_2.accuracy
+        + "%"
+        + " f1= %.2f" % conf_mat_2.f1
+    )
+    mng = plt.get_current_fig_manager()
+    mng.resize(*mng.window.maxsize())
+    plt.show()
+
+
+def graphs(mag: np.array, dir: np.array, g_true: np.array, split_mag: np.array):
     # Plot the Magnitude histogram graph
     his = plt.figure(figsize=(8, 8))
     n, bins, patches = plt.hist(
@@ -442,38 +435,15 @@ def graphs(mag, dir, g_true, split_mag, split_dir):
     plt.show()
 
     # Plot the comparison between the true and the producted Change Detection maps
-    fig, ax = plt.subplots(1, 3)
-    fig.suptitle("Change Detection maps", fontsize=20)
-    cdM = [g_true, CDmap(mag), CDmap(dir)]
-    titles = ["Ground truth", "Magnitude", "Direction"]
-    ax[0].imshow(cdM[0], cmap="gray", interpolation="nearest")
-    ax[0].set_title(titles[0])
-    ax[1].imshow(cdM[1], cmap="gray", interpolation="nearest")
-    confM = confusionMatrix(cdM[1], g_true)
-    ax[1].set_title(titles[1] + " acc= %.2f" % confM[0] + "%" + " f1= %.2f" % confM[1])
-    ax[2].imshow(cdM[2], cmap="gray", interpolation="nearest")
-    confM = confusionMatrix(cdM[2], g_true)
-    ax[2].set_title(titles[2] + " acc= %.2f" % confM[0] + "%" + " f1= %.2f" % confM[1])
-    mng = plt.get_current_fig_manager()
-    mng.resize(*mng.window.maxsize())
-    plt.show()
+    comparison_plot(mag, dir, g_true, titles=["Ground truth", "Magnitude", "Direction"])
 
     # Plot the comparison between the true and the producted Change Detection maps (also the splitted ones)
-    fig, ax = plt.subplots(1, 3)
-    fig.suptitle("Change Detection maps", fontsize=20)
-    cdM = [g_true, CDmap(mag), CDmap(split_mag)]
-    titles = ["Ground truth", "Magnitude", "Splitted Magnitude"]
-    ax[0].imshow(cdM[0], cmap="gray", interpolation="nearest")
-    ax[0].set_title(titles[0])
-    ax[1].imshow(cdM[1], cmap="gray", interpolation="nearest")
-    confM = confusionMatrix(cdM[1], g_true)
-    ax[1].set_title(titles[1] + " acc= %.2f" % confM[0] + "%" + " f1= %.2f" % confM[1])
-    ax[2].imshow(cdM[2], cmap="gray", interpolation="nearest")
-    confM = confusionMatrix(cdM[2], g_true)
-    ax[2].set_title(titles[2] + " acc= %.2f" % confM[0] + "%" + " f1= %.2f" % confM[1])
-    mng = plt.get_current_fig_manager()
-    mng.resize(*mng.window.maxsize())
-    plt.show()
+    comparison_plot(
+        mag,
+        g_true,
+        split_mag,
+        titles=["Ground truth", "Magnitude", "Splitted Magnitude"],
+    )
 
 
 def main():
@@ -495,7 +465,7 @@ def main():
 
     # Remove unuseful bands for change detection
     unuseful_bands = [10]
-    i_before, i_after = removeBands(img_before, img_after, unuseful_bands)
+    i_before, i_after = remove_bands(img_before, img_after, unuseful_bands)
 
     # Load ground truth
     groundTr, _ = load_ground_truth(ground_truth_path)
@@ -508,10 +478,10 @@ def main():
         d_mag, d_dir = c2va(i_before[im], i_after[im])
 
         # Split image
-        splittedImage = imageSplitting(d_mag, d_dir, window_size)
+        splittedImage = image_splitting(d_mag, d_dir, window_size)
 
         # Image produced adaptive split selection
-        s_mag, s_dir = splitSelection(
+        s_mag, s_dir = split_selection(
             splittedImage,
             original_dimensions=d_mag.shape[:],
             window_size=window_size,
@@ -520,7 +490,10 @@ def main():
 
         ### PLOT GRAPHS ###
         graphs(
-            mag=d_mag, dir=d_dir, g_true=groundTr[im], split_mag=s_mag, split_dir=s_dir
+            mag=d_mag,
+            dir=d_dir,
+            g_true=groundTr[im],
+            split_mag=s_mag,
         )
 
 
