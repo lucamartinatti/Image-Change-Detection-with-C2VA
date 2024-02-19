@@ -505,10 +505,10 @@ def main():
     window_size = [100, 100]
     for im in imageList:
         # Apply C2VA Amalysis
-        d_mag, dDir = c2va(i_before[im], i_after[im])
+        d_mag, d_dir = c2va(i_before[im], i_after[im])
 
         # Split image
-        splittedImage = imageSplitting(d_mag, dDir, window_size)
+        splittedImage = imageSplitting(d_mag, d_dir, window_size)
 
         # Image produced adaptive split selection
         s_mag, s_dir = splitSelection(
@@ -520,7 +520,7 @@ def main():
 
         ### PLOT GRAPHS ###
         graphs(
-            mag=d_mag, dir=dDir, g_true=groundTr[im], split_mag=s_mag, split_dir=s_dir
+            mag=d_mag, dir=d_dir, g_true=groundTr[im], split_mag=s_mag, split_dir=s_dir
         )
 
 
