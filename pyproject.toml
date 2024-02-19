@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "c2va"
+version = "0.1.0"
+description = ""
+authors = ["lucamartinatti <luca.martinatti@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.9,<4.0"
+numpy = "^1.26.4"
+opencv-python = "^4.9.0.80"
+matplotlib = "^3.8.3"
+pillow = "^10.2.0"
+
+[tool.poetry.group.dev.dependencies]
+black = "^24.2.0"
+flake8 = "^7.0.0"
+
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

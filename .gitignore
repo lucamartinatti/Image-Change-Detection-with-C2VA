@@ -1,4 +1,6 @@
 # Gitignore file
 venv/
 .idea/
+.vscode/
 
+data/
